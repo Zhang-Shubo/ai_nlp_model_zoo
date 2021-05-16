@@ -1,56 +1,17 @@
-# time: 2021/4/29 0:17
-# File: trainer.py
+# time: 2021/5/12 23:17
+# File: classifier.py
 # Author: zhangshubo
 # Mail: supozhang@126.com
+
 import torch
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from metric import accuracy
-from utils import sequence_padding
-
-
-class Trainer:
-
-    def __init__(self, model, criterion, optimizer, learning_rate, device="cpu"):
-        self.model = model
-        self.criterion = criterion()
-        self.optimizer = optimizer(model.parameters(), lr=learning_rate)
-        self.device = device
-
-    def train_step(self, train_data, valid_data, vocab_dict, label_dict):
-        running_loss = 0.0
-        for i, (batch_x, batch_y_true) in tqdm(enumerate(train_data)):
-            batch_x = list(map(lambda x: sequence_padding(x, 64), map(vocab_dict.lookup, batch_x)))
-            batch_x = torch.tensor(batch_x, dtype=torch.long).to(self.device)
-            batch_y_true = list(map(lambda x: sequence_padding(x, 64), map(label_dict.lookup, map(lambda x: x.split(" "), batch_y_true))))
-            batch_y_true = torch.tensor(batch_y_true, dtype=torch.long).to(self.device)
-            out = self.model(batch_x)
-            loss = self.criterion(out, batch_y_true)
-            self.optimizer.zero_grad()
-            loss.backward()
-            self.optimizer.step()
-
-            running_loss += loss.item()
-            if i % 200 == 0:
-                print(running_loss/200)
-                running_loss = 0.0
-        self.validation(valid_data, vocab_dict, label_dict)
-
-    def validation(self, valid_data, vocab_dict, label_dict):
-        all_y_true = []
-        all_y_predict = []
-        for i, (batch_x, batch_y_true) in tqdm(enumerate(valid_data)):
-            batch_x = list(map(lambda x: sequence_padding(x, 50, pos="pre"), map(vocab_dict.lookup, batch_x)))
-            batch_x = torch.tensor(batch_x, dtype=torch.long).to(self.device)
-            batch_y_true = list(map(label_dict.lookup, batch_y_true))
-            out = self.model(batch_x)
-            out = torch.argmax(out, dim=1)
-            all_y_predict.extend(out.cpu().numpy())
-            all_y_true.extend(batch_y_true)
-        print(f"validation accuracy: {accuracy(all_y_true, all_y_predict)}")
-
-    def save_model(self, postfix="0"):
-        torch.save(self.model, f"model_{postfix}.bin")
+from data_loader import LabellingDataset
+from layer.crf import CRFLoss
+from metric.metric import accuracy
+from model.bilstm_labelling import BiLSTM
+from utils import VocabDict, LabelDict, sequence_padding
 
 
 class LabellingTrainer:
@@ -103,3 +64,29 @@ class LabellingTrainer:
 
     def save_model(self, postfix="0"):
         torch.save(self.model, f"model_{postfix}.bin")
+
+
+def train():
+    device = "cpu"
+    train_dataset = LabellingDataset("../data/labelling/data/train.json")
+    valid_dataset = LabellingDataset("../data/labelling/data/dev.json")
+    train_data = DataLoader(train_dataset, batch_size=64, shuffle=True)
+    valid_data = DataLoader(valid_dataset, batch_size=64, shuffle=True)
+
+    vocab_dict = VocabDict(train_dataset.get_all_inputs())
+    tag_dict = LabelDict(train_dataset.get_all_labels(), sequence=True)
+
+    model = BiLSTM(len(vocab_dict), len(tag_dict), embedding_size=300, hidden_size=512, learn_mode="join",
+                   device=device)
+
+    trainer = LabellingTrainer(model, CRFLoss, torch.optim.Adam, learning_rate=0.002, device=device)
+
+    for i in range(40):
+        trainer.train_step(train_data, valid_data, vocab_dict, tag_dict)
+    trainer.validation(valid_data, vocab_dict, tag_dict)
+    trainer.save_model(postfix="final")
+    print(0)
+
+
+if __name__ == '__main__':
+    train()

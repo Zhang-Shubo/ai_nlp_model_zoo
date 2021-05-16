@@ -27,14 +27,16 @@ class LabellingTrainer:
         for i, (batch_x, batch_y_true) in tqdm(enumerate(train_data)):
             batch_x = list(map(lambda x: sequence_padding(x, 64), map(vocab_dict.lookup, batch_x)))
             mask = [[0 if not i else 1 for i in x] for x in batch_x]
+            mask = torch.tensor(mask, dtype=torch.long).to(self.device)
+
             batch_x = torch.tensor(batch_x, dtype=torch.long).to(self.device)
-            # mask = torch.tensor(mask, dtype=torch.long).to(self.device)
+
             batch_y_true = list(map(lambda x: sequence_padding(x, 64), map(label_dict.lookup, map(lambda x: x.split(" "), batch_y_true))))
             batch_y_true = torch.tensor(batch_y_true, dtype=torch.long).to(self.device)
             out = self.model(batch_x)
             # loss = self.criterion(out.view(-1, self.mode.output_size) * mask.view(-1).unsqueeze(-1),
             #                       batch_y_true.view(-1)*mask.view(-1))
-            loss = self.criterion(self.model.crf, batch_y_true, out)
+            loss = self.criterion(self.model.crf, batch_y_true, out, mask)
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -85,7 +87,7 @@ def train():
     model = BiLSTM(len(vocab_dict), len(tag_dict), embedding_size=300, hidden_size=512, learn_mode="join",
                    device=device)
 
-    trainer = LabellingTrainer(model, CRFLoss, torch.optim.Adam, learning_rate=0.002, device=device)
+    trainer = LabellingTrainer(model, CRFLoss, torch.optim.Adam, learning_rate=0.001, device=device)
 
     for i in range(40):
         trainer.train_step(train_data, valid_data, vocab_dict, tag_dict)

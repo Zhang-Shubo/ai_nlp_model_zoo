@@ -11,8 +11,8 @@ class CRFLoss(torch.nn.Module):
     def __init__(self):
         super(CRFLoss, self).__init__()
 
-    def forward(self, crf, y_true, y_pred):
-        return crf.crf_loss(y_true, y_pred)
+    def forward(self, crf, y_true, y_pred, mask):
+        return crf.crf_loss(y_true, y_pred, mask=mask)
 
 
 class CRF(torch.nn.Module):
@@ -46,10 +46,19 @@ class CRF(torch.nn.Module):
         last_state - B*F
         input_energy_t - B*F
         """
-        input_energy_t = input_energy_t.unsqueeze(1)  # B * 1 * F
+        if mask is not None:
+            input_energy_t = input_energy_t * mask[:, 1].unsqueeze(-1)
+        input_energy_t = input_energy_t .unsqueeze(1)  # B * 1 * F
+
         last_state = last_state.unsqueeze(2)  # B * F * 1
         transition = self.transition.unsqueeze(0)  # 1 * F * F
-        score = last_state + input_energy_t + transition
+        chain_energy = input_energy_t + transition
+
+        if mask is not None:
+            mask = mask[:, 0] * mask[:, 1]
+            mask = mask.unsqueeze(-1).unsqueeze(-1)
+            chain_energy = chain_energy * mask
+        score = last_state + chain_energy
 
         new_state = self._log_sum_exp(score, 1)  # (batch_size, num_tags)
         return new_state
@@ -64,11 +73,17 @@ class CRF(torch.nn.Module):
             y_true = torch.zeros(
                 y_true.size(0), y_true.size(1), self.units).to(self.device).scatter_(2, y_true, 1)
         sequence_len = x.size(1)
-        energy = self.get_energy(y_true, x, mask)
+        energy = self.get_energy(y_true, x, mask=mask)
         hidden_state = x[:, 0, :]
         for i in range(1, sequence_len):
-            hidden_state = self.step(x[:, i, :], hidden_state)
-        return torch.sum(self._log_sum_exp(hidden_state, 1) - energy)/y_true.size(0)
+            hidden_state = self.step(x[:, i, :], hidden_state, mask=mask[:, i-1:i+1])
+
+        nll = self._log_sum_exp(hidden_state, 1) - energy
+        if mask is not None:
+            nll = nll/torch.sum(mask, 1)
+        else:
+            nll = nll/sequence_len
+        return torch.sum(nll)/y_true.size(0)
 
     def crf_loss(self, y_true, x, mask=None):
 

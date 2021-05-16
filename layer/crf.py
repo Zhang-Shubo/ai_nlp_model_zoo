@@ -81,7 +81,11 @@ class CRF(torch.nn.Module):
         dim2 = y_true.size(2)
         dim1 = y_true.size(1)
         input_energy = torch.sum(input_energy * y_true, 2)  # B * T
-        chain_energy = torch.sum(torch.mm(y_true[:, :-1, :].reshape(-1, dim2), self.transition).reshape(-1, dim1-1, dim2) * y_true[:, 1:, :], 2)
+        # y_true is B * T * F, transition F * F
+        # 选择从T-1开始的转移概率
+        _ = torch.mm(y_true[:, :-1, :].reshape(-1, dim2), self.transition).reshape(-1, dim1-1, dim2)
+        # 选择到T的转移概率，然后降维
+        chain_energy = torch.sum(_ * y_true[:, 1:, :], 2)
 
         if mask is not None:
             chain_mask = mask[:, :-1] * mask[:, 1:]
@@ -109,13 +113,16 @@ class CRF(torch.nn.Module):
             input_energy_t = x[:, i, :].unsqueeze(1)  # B * 1 * F
             hidden_state = hidden_state.unsqueeze(2)  # B * F * 1
             transition = self.transition.unsqueeze(0)  # 1 * F * F
+            # 这里可以不用求log-sum-exp了，因为单调性是相同的
             score = hidden_state + input_energy_t + transition
             best_score, best_path = score.max(1)
             hidden_state = best_score
             paths.append(best_path)
+        # 找到最后一列的最优序号
         _, last_best = hidden_state.max(1)
         final_path = [last_best]
         last_best = last_best.unsqueeze(-1)
+        # 回溯之前的最优序号
         for p in paths[::-1]:
             last_best = torch.gather(p, 1, last_best)
             final_path.append(list(last_best.squeeze(-1).cpu().numpy()))

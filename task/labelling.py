@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from data_loader import LabellingDataset
 from layer.crf import CRFLoss
-from metric.metric import accuracy
+from metric.metric import accuracy, ner_f1
 from model.bilstm_labelling import BiLSTM
 from utils import VocabDict, LabelDict, sequence_padding
 
@@ -46,30 +46,36 @@ class LabellingTrainer:
         self.validation(valid_data, vocab_dict, label_dict)
 
     def validation(self, valid_data, vocab_dict, label_dict):
-        all_y_true = []
-        all_y_predict = []
+        all_y_true_idx = []
+        all_y_predict_idx = []
+        all_y_true_token = []
+        all_y_predict_token = []
         for i, (batch_x, batch_y_true) in tqdm(enumerate(valid_data)):
             batch_x = list(map(lambda x: sequence_padding(x, 64), map(vocab_dict.lookup, batch_x)))
             batch_x = torch.tensor(batch_x, dtype=torch.long).to(self.device)
+            batch_y_true_token = list(map(lambda x: x.split(" "), batch_y_true))
             batch_y_true = list(map(lambda x: sequence_padding(x, 64),
-                                    map(label_dict.lookup, map(lambda x: x.split(" "), batch_y_true))))
+                                    map(label_dict.lookup, batch_y_true_token)))
             out = self.model(batch_x)
             if self.model.learn_mode == "join":
                 out = self.model.crf.viterbi_decoding(out)
             else:
                 out = torch.argmax(out, dim=2)
-            all_y_predict.extend(out.contiguous().view(-1).cpu().numpy())
-            all_y_true.extend(torch.tensor(batch_y_true, dtype=torch.long).view(-1).numpy())
-        print(f"validation accuracy: {accuracy(all_y_true, all_y_predict)}")
+            all_y_predict_idx.extend(out.contiguous().view(-1).cpu().numpy())
+            all_y_true_idx.extend(torch.tensor(batch_y_true, dtype=torch.long).view(-1).numpy())
+            all_y_true_token.extend(batch_y_true_token)
+            all_y_predict_token.extend(list(map(label_dict.refactor, out.cpu().numpy().tolist())))
+        print(f"validation token accuracy: {accuracy(all_y_true_idx, all_y_predict_idx)}")
+        print(f"validation ner f1: {ner_f1(all_y_true_token, all_y_predict_token)}")
 
     def save_model(self, postfix="0"):
         torch.save(self.model, f"model_{postfix}.bin")
 
 
 def train():
-    device = "cpu"
-    train_dataset = LabellingDataset("../data/labelling/data/train.json")
-    valid_dataset = LabellingDataset("../data/labelling/data/dev.json")
+    device = "cuda:0"
+    train_dataset = LabellingDataset("data/labelling/data/train.json")
+    valid_dataset = LabellingDataset("data/labelling/data/dev.json")
     train_data = DataLoader(train_dataset, batch_size=64, shuffle=True)
     valid_data = DataLoader(valid_dataset, batch_size=64, shuffle=True)
 

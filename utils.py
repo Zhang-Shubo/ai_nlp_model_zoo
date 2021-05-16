@@ -90,6 +90,7 @@ class LabelDict(dict):
         self.is_sequence = sequence
         if self.is_sequence:
             self["O"] = 0
+            self.data.append("O")
         if not self.load():
             self.traverse(labels)
 
@@ -124,6 +125,11 @@ class LabelDict(dict):
                         self.data.append(tag)
 
     def lookup(self, label):
+        """
+        将标签转化为数字
+        :param label:
+        :return:
+        """
         if self.is_sequence:
             res = []
             for tag in label:
@@ -131,6 +137,20 @@ class LabelDict(dict):
                     res.append(self[tag])
             return res
         return self[label]
+
+    def refactor(self, predict):
+        """
+        将数字转化为标签
+        :param predict:
+        :return:
+        """
+        if not self.is_sequence:
+            return self.data[predict]
+        else:
+            res = []
+            for tag_idx in predict:
+                res.append(self.data[tag_idx])
+            return res
 
 
 def sequence_padding(seq, max_len, pos="post", pad_idx=0):

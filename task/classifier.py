@@ -9,32 +9,26 @@ from torch.utils.data import DataLoader
 
 from metric.metric import accuracy
 from model.bert_classifier import BertClassifier
-from model.bilstm_classifier import BiLSTM
-from utils import VocabDict, LabelDict, sequence_padding
+from utils import VocabDict, LabelDict, sequence_padding, char_tokenizer
 
 import torch
 
 
-def classifier_tokenizer(batch_x, vocab_dict, device):
-    batch_x = list(map(lambda x: sequence_padding(x, 64), map(vocab_dict.lookup, batch_x)))
-    batch_x = torch.tensor(batch_x, dtype=torch.long).to(device)
-    return batch_x
-
-
 class Trainer:
 
-    def __init__(self, model, criterion, optimizer, learning_rate, tokenizer=None, device="cpu"):
+    def __init__(self, model, criterion, optimizer, learning_rate, tokenizer=None, max_len=64, device="cpu"):
         self.model = model
         self.criterion = criterion()
         self.optimizer = optimizer(model.parameters(), lr=learning_rate)
         self.device = device
         self.tokenizer = tokenizer
+        self.max_len = max_len
 
     def train_step(self, train_data, valid_data, vocab_dict, label_dict):
         running_loss = 0.0
         for i, (batch_x, batch_y_true) in tqdm(enumerate(train_data)):
             if callable(self.tokenizer):
-                batch_x = self.tokenizer(batch_x, vocab_dict, self.device)
+                batch_x = self.tokenizer(batch_x, vocab_dict, self.max_len, self.device)
             else:
                 batch_x = list(batch_x)
             batch_y_true = list(map(label_dict.lookup, batch_y_true))
@@ -80,7 +74,7 @@ def train():
 
     # model = BiLSTM(len(vocab_dict), len(label_dict), embedding_size=300, hidden_size=512, device=device)
     model = BertClassifier(len(label_dict), device=device)
-    trainer = Trainer(model, torch.nn.CrossEntropyLoss, torch.optim.Adam, learning_rate=0.00002, device=device)
+    trainer = Trainer(model, torch.nn.CrossEntropyLoss, torch.optim.Adam, tokenizer=char_tokenizer, learning_rate=0.00002, device=device)
     for i in range(4):
         trainer.train_step(train_data, valid_data, vocab_dict, label_dict)
         trainer.validation(valid_data, vocab_dict, label_dict)

@@ -10,30 +10,44 @@ from tqdm import tqdm
 from data_loader import LabellingDataset
 from layer.crf import CRFLoss
 from metric.metric import accuracy, ner_f1
+from model.bert_labelling import BertLabelling
 from model.bilstm_labelling import BiLSTM
-from utils import VocabDict, LabelDict, sequence_padding
+from utils import VocabDict, LabelDict, sequence_padding, char_tokenizer
 
 
 class LabellingTrainer:
 
-    def __init__(self, model, criterion, optimizer, learning_rate, device="cpu"):
+    def __init__(self, model, criterion, optimizer, learning_rate, tokenizer=None, max_len=64, device="cpu"):
         self.model = model
         self.criterion = criterion()
         self.optimizer = optimizer(model.parameters(), lr=learning_rate)
         self.device = device
+        self.tokenizer = tokenizer
+        self.max_len = max_len
 
     def train_step(self, train_data, valid_data, vocab_dict, label_dict):
         running_loss = 0.0
         for i, (batch_x, batch_y_true) in tqdm(enumerate(train_data)):
-            batch_x = list(map(lambda x: sequence_padding(x, 64), map(vocab_dict.lookup, batch_x)))
-            mask = [[0 if not i else 1 for i in x] for x in batch_x]
+            batch_x_ = list(map(lambda x: sequence_padding(x, self.max_len), map(vocab_dict.lookup, batch_x)))
+            mask = [[0 if not i else 1 for i in x] for x in batch_x_]
             mask = torch.tensor(mask, dtype=torch.long).to(self.device)
 
-            batch_x = torch.tensor(batch_x, dtype=torch.long).to(self.device)
+            if callable(self.tokenizer):
+                batch_x = self.tokenizer(batch_x, vocab_dict, self.max_len, self.device)
+            else:
+                batch_x = list(batch_x)
 
-            batch_y_true = list(map(lambda x: sequence_padding(x, 64), map(label_dict.lookup, map(lambda x: x.split(" "), batch_y_true))))
-            batch_y_true = torch.tensor(batch_y_true, dtype=torch.long).to(self.device)
-            out = self.model(batch_x)
+            if not callable(self.tokenizer):
+                out, mask = self.model(batch_x)
+                batch_y_true = list(map(lambda x: sequence_padding(x, mask.size(1)),
+                                        map(lambda x: label_dict.lookup(x, begin=True, end=True),
+                                            map(lambda x: x.split(" "), batch_y_true))))
+                batch_y_true = torch.tensor(batch_y_true, dtype=torch.long).to(self.device)
+            else:
+                out = self.model(batch_x)
+                batch_y_true = list(map(lambda x: sequence_padding(x, self.max_len),
+                                        map(label_dict.lookup, map(lambda x: x.split(" "), batch_y_true))))
+
             # loss = self.criterion(out.view(-1, self.mode.output_size) * mask.view(-1).unsqueeze(-1),
             #                       batch_y_true.view(-1)*mask.view(-1))
             loss = self.criterion(self.model.crf, batch_y_true, out, mask)
@@ -42,8 +56,8 @@ class LabellingTrainer:
             self.optimizer.step()
 
             running_loss += loss.item()
-            if (i+1) % 25 == 0:
-                print(running_loss/25)
+            if (i + 1) % 25 == 0:
+                print(running_loss / 25)
                 running_loss = 0.0
         self.validation(valid_data, vocab_dict, label_dict)
 
@@ -53,10 +67,12 @@ class LabellingTrainer:
         all_y_true_token = []
         all_y_predict_token = []
         for i, (batch_x, batch_y_true) in tqdm(enumerate(valid_data)):
-            batch_x = list(map(lambda x: sequence_padding(x, 64), map(vocab_dict.lookup, batch_x)))
-            batch_x = torch.tensor(batch_x, dtype=torch.long).to(self.device)
+            if callable(self.tokenizer):
+                batch_x = self.tokenizer(batch_x, vocab_dict, self.max_len, self.device)
+            else:
+                batch_x = list(batch_x)
             batch_y_true_token = list(map(lambda x: x.split(" "), batch_y_true))
-            batch_y_true = list(map(lambda x: sequence_padding(x, 64),
+            batch_y_true = list(map(lambda x: sequence_padding(x, self.max_len),
                                     map(label_dict.lookup, batch_y_true_token)))
             out = self.model(batch_x)
             if self.model.learn_mode == "join":
@@ -78,16 +94,20 @@ def train():
     device = "cuda:0"
     train_dataset = LabellingDataset("data/labelling/data/train.json")
     valid_dataset = LabellingDataset("data/labelling/data/dev.json")
-    train_data = DataLoader(train_dataset, batch_size=64, shuffle=True)
-    valid_data = DataLoader(valid_dataset, batch_size=64, shuffle=True)
+    train_data = DataLoader(train_dataset, batch_size=8, shuffle=True)
+    valid_data = DataLoader(valid_dataset, batch_size=8, shuffle=True)
 
     vocab_dict = VocabDict(train_dataset.get_all_inputs())
     tag_dict = LabelDict(train_dataset.get_all_labels(), sequence=True)
 
-    model = BiLSTM(len(vocab_dict), len(tag_dict), embedding_size=300, hidden_size=512, learn_mode="join",
-                   device=device)
-
-    trainer = LabellingTrainer(model, CRFLoss, torch.optim.Adam, learning_rate=0.001, device=device)
+    # model = BiLSTM(len(vocab_dict), len(tag_dict), embedding_size=300, hidden_size=512, learn_mode="join",
+    #                device=device)
+    # trainer = LabellingTrainer(
+    #     model, CRFLoss, torch.optim.Adam, tokenizer=char_tokenizer, learning_rate=0.001, device=device)
+    max_len = 64
+    model = BertLabelling(len(tag_dict), linear_dropout_rate=0.2, learn_mode="join", max_len=max_len,
+                          device=device)
+    trainer = LabellingTrainer(model, CRFLoss, torch.optim.Adam, learning_rate=0.00003, max_len=max_len, device=device)
 
     for i in range(40):
         trainer.train_step(train_data, valid_data, vocab_dict, tag_dict)

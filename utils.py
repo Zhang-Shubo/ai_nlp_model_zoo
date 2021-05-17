@@ -5,6 +5,8 @@
 import json
 import os
 
+import torch
+
 
 def read_nlpcc_text(path):
     with open(path, "r", encoding="utf-8") as fd:
@@ -124,17 +126,20 @@ class LabelDict(dict):
                         self[tag] = len(self)
                         self.data.append(tag)
 
-    def lookup(self, label):
+    def lookup(self, label, begin=False, end=False):
         """
         将标签转化为数字
-        :param label:
-        :return:
+
         """
         if self.is_sequence:
             res = []
+            if begin:
+                res.append(self["O"])
             for tag in label:
                 if tag in self:
                     res.append(self[tag])
+            if end:
+                res.append(self["O"])
             return res
         return self[label]
 
@@ -162,3 +167,9 @@ def sequence_padding(seq, max_len, pos="post", pad_idx=0):
     else:
         z[-len(seq):] = seq
     return z
+
+
+def char_tokenizer(batch_x, vocab_dict, max_len, device):
+    batch_x = list(map(lambda x: sequence_padding(x, max_len), map(vocab_dict.lookup, batch_x)))
+    batch_x = torch.tensor(batch_x, dtype=torch.long).to(device)
+    return batch_x

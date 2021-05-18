@@ -28,7 +28,7 @@ class Trainer:
         running_loss = 0.0
         for i, (batch_x, batch_y_true) in tqdm(enumerate(train_data)):
             if callable(self.tokenizer):
-                batch_x = self.tokenizer(batch_x, vocab_dict, self.max_len, self.device)
+                batch_x = self.tokenizer(batch_x, vocab_dict.lookup, self.max_len, self.device)
             else:
                 batch_x = list(batch_x)
             batch_y_true = list(map(label_dict.lookup, batch_y_true))

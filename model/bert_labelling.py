@@ -35,12 +35,12 @@ class BertLabelling(nn.Module):
 
         self.crf = CRF(units=self.output_size, learn_mode=self.learn_mode, test_mode=self.test_mode, device=self.device)
 
-    def forward(self, x_in):
-        inputs = self.tokenizer(x_in, return_tensors="pt", padding=True, truncation=True, max_length=self.max_len)
-        for key, value in inputs.data.items():
-            inputs.data[key] = value.to(self.device)
+    def forward(self, inputs):
+        # inputs = self.tokenizer(x_in, return_tensors="pt", padding=True, truncation=True, max_length=self.max_len)
+        # for key, value in inputs.data.items():
+        #     inputs.data[key] = value.to(self.device)
         embedding = self.bert_model(**inputs)
 
         out = self.out_layer(embedding["last_hidden_state"])
 
-        return out, inputs.data["attention_mask"]
+        return out

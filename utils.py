@@ -8,6 +8,9 @@ import os
 import torch
 
 
+_bert_token_dict = json.loads(open("data/bert/bert-base-chinese/tokenizer.json", encoding="utf-8").read())["model"]["vocab"]
+
+
 def read_nlpcc_text(path):
     with open(path, "r", encoding="utf-8") as fd:
         while True:
@@ -169,7 +172,22 @@ def sequence_padding(seq, max_len, pos="post", pad_idx=0):
     return z
 
 
-def char_tokenizer(batch_x, vocab_dict, max_len, device):
-    batch_x = list(map(lambda x: sequence_padding(x, max_len), map(vocab_dict.lookup, batch_x)))
+def char_tokenizer(batch_x, lookup_f, max_len, device):
+    batch_x = list(map(lambda x: sequence_padding(x, max_len), map(lookup_f, batch_x)))
+    batch_x = torch.tensor(batch_x, dtype=torch.long).to(device)
+    return batch_x
+
+
+def bert_tokenizer(batch_x, max_len, device):
+    def lookup(x):
+        res = [_bert_token_dict["[CLS]"]]
+        for char in x:
+            if char in _bert_token_dict:
+                res.append(_bert_token_dict[char])
+            else:
+                res.append(_bert_token_dict["[UNK]"])
+        res.append(_bert_token_dict["[SEP]"])
+        return res
+    batch_x = list(map(lambda x: sequence_padding(x, max_len), map(lookup, batch_x)))
     batch_x = torch.tensor(batch_x, dtype=torch.long).to(device)
     return batch_x

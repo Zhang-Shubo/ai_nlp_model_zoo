@@ -70,7 +70,7 @@ def ner_f1(y_true, y_predict):
         for ne, values in predict.items():
             positive_dict[ne] += len(values)
 
-    precise = sum(true_positive_dict.values()) / sum(positive_dict.values())
-    recall = sum(true_positive_dict.values()) / sum(true_dict.values())
-    f1 = 2*precise*recall / (precise+recall)
+    precise = sum(true_positive_dict.values()) / (sum(positive_dict.values())+0.0001)
+    recall = sum(true_positive_dict.values()) / (sum(true_dict.values())+0.0001)
+    f1 = 2*precise*recall / (precise+recall+0.0001)
     return f1

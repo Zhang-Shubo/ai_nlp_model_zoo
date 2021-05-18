@@ -27,7 +27,7 @@ class CRF(torch.nn.Module):
         self.units = units
         self.learn_mode = learn_mode
         self.test_mode = test_mode
-        self.transition = Parameter(torch.Tensor(units, units)).to(device)
+        self.transition = Parameter(torch.Tensor(units, units),  requires_grad=True)
         init.xavier_normal(self.transition)
         self.device = device
         self.cross_entropy = torch.nn.CrossEntropyLoss()

@@ -33,7 +33,8 @@ class BertLabelling(nn.Module):
                                          batch_first=True)
         self.out_layer.to(device)
 
-        self.crf = CRF(units=self.output_size, learn_mode=self.learn_mode, test_mode=self.test_mode, device=self.device)
+        self.crf = CRF(
+            units=self.output_size, learn_mode=self.learn_mode, test_mode=self.test_mode, device=device).to(device)
 
     def forward(self, inputs):
         # inputs = self.tokenizer(x_in, return_tensors="pt", padding=True, truncation=True, max_length=self.max_len)

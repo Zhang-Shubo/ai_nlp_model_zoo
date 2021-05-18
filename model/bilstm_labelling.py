@@ -45,7 +45,8 @@ class BiLSTM(nn.Module):
         self.dense = TimeDistributed(
             nn.Sequential(nn.Dropout(dropout_rate), nn.Linear(self.hidden_size, self.output_size)).to(self.device),
             batch_first=True)
-        self.crf = CRF(units=self.output_size, learn_mode=self.learn_mode, test_mode=self.test_mode, device=self.device)
+        self.crf = CRF(
+            units=self.output_size, learn_mode=self.learn_mode, test_mode=self.test_mode, device=device).to(device)
 
     def forward(self, x_in):
         embedding = self.word_embedding(x_in)

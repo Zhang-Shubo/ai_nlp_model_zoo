@@ -85,7 +85,16 @@ class BertLabellingTrainer:
     def __init__(self, model, criterion, optimizer, learning_rate, tokenizer=None, max_len=64, device="cpu"):
         self.model = model
         self.criterion = criterion()
-        self.optimizer = optimizer(model.parameters(), lr=learning_rate)
+        # self.optimizer = optimizer([{'params': self.model.bert_model.parameters(), 'lr': learning_rate},
+        #                        {'params': self.model.out_layer.parameters(), 'lr': learning_rate},
+        #                        {'params': self.model.crf.parameters(), 'lr': learning_rate * 100}])
+        # self.optimizer = optimizer(model.parameters(), lr=learning_rate)
+        crf_params = list(map(id, self.model.crf.parameters()))
+        base_params = filter(lambda p: id(p) not in crf_params, self.model.parameters())
+
+        self.optimizer = optimizer([{'params': base_params},
+                                    {'params': self.model.crf.parameters(), 'lr': learning_rate * 100}],
+                                   lr=learning_rate)
         self.device = device
         self.tokenizer = tokenizer
         self.max_len = max_len
@@ -151,21 +160,21 @@ def train():
     device = "cuda:0"
     train_dataset = LabellingDataset("data/labelling/data/train.json")
     valid_dataset = LabellingDataset("data/labelling/data/dev.json")
-    train_data = DataLoader(train_dataset, batch_size=128, shuffle=True)
-    valid_data = DataLoader(valid_dataset, batch_size=128, shuffle=True)
+    train_data = DataLoader(train_dataset, batch_size=16, shuffle=True)
+    valid_data = DataLoader(valid_dataset, batch_size=16, shuffle=True)
 
     vocab_dict = VocabDict(train_dataset.get_all_inputs())
     tag_dict = LabelDict(train_dataset.get_all_labels(), sequence=True)
 
-    model = BiLSTM(len(vocab_dict), len(tag_dict), embedding_size=300, hidden_size=512, learn_mode="join",
-                   device=device)
-    trainer = LabellingTrainer(
-        model, CRFLoss, torch.optim.Adam, tokenizer=char_tokenizer, learning_rate=0.002, device=device)
-    # max_len = 64
-    # model = BertLabelling(len(tag_dict), linear_dropout_rate=0.2, learn_mode="join", max_len=max_len,
-    #                       device=device)
-    # trainer = BertLabellingTrainer(model, CRFLoss, torch.optim.Adam, learning_rate=0.00003,
-    #                                tokenizer=bert_tokenizer, max_len=max_len, device=device)
+    # model = BiLSTM(len(vocab_dict), len(tag_dict), embedding_size=300, hidden_size=512, learn_mode="join",
+    #                device=device)
+    # trainer = LabellingTrainer(
+    #     model, CRFLoss, torch.optim.Adam, tokenizer=char_tokenizer, learning_rate=0.002, device=device)
+    max_len = 64
+    model = BertLabelling(len(tag_dict), linear_dropout_rate=0.2, learn_mode="join", max_len=max_len,
+                          device=device)
+    trainer = BertLabellingTrainer(model, CRFLoss, torch.optim.Adam, learning_rate=0.00003,
+                                   tokenizer=bert_tokenizer, max_len=max_len, device=device)
 
     for i in range(40):
         trainer.train_step(train_data, valid_data, vocab_dict, tag_dict)

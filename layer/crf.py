@@ -48,7 +48,7 @@ class CRF(torch.nn.Module):
         """
         if mask is not None:
             input_energy_t = input_energy_t * mask[:, 1].unsqueeze(-1)
-        input_energy_t = input_energy_t .unsqueeze(1)  # B * 1 * F
+        input_energy_t = input_energy_t.unsqueeze(1)  # B * 1 * F
 
         last_state = last_state.unsqueeze(2)  # B * F * 1
         transition = self.transition.unsqueeze(0)  # 1 * F * F

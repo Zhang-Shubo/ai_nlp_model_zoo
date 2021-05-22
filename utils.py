@@ -191,3 +191,17 @@ def bert_tokenizer(batch_x, max_len, device):
     batch_x = list(map(lambda x: sequence_padding(x, max_len), map(lookup, batch_x)))
     batch_x = torch.tensor(batch_x, dtype=torch.long).to(device)
     return batch_x
+
+
+def extra_tencent_embedding(path):
+    res = []
+    with open(path, encoding="utf-8") as fd:
+        while True:
+            line = fd.readline()
+            if not line:
+                break
+            if len(line.strip().split(" ")[0]) == 1:
+                res.append(line)
+    with open("data/tencent_char_embedding.txt", "w", encoding="utf-8") as fd:
+        for line in res:
+            fd.write(line + "\n")

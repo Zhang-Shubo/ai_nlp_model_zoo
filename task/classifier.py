@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 from metric.metric import accuracy
 from model.bert_classifier import BertClassifier
 from model.cnn_classifier import TextCNN
-from utils import VocabDict, LabelDict, sequence_padding, char_tokenizer
+from utils import VocabDict, LabelDict, sequence_padding, char_tokenizer, add_weight_decay
 
 import torch
 
@@ -20,7 +20,10 @@ class Trainer:
     def __init__(self, model, criterion, optimizer, learning_rate, tokenizer=None, max_len=50, device="cpu"):
         self.model = model
         self.criterion = criterion()
-        self.optimizer = optimizer(model.parameters(), lr=learning_rate)
+
+        params = add_weight_decay(self.model, 2e-4)
+        self.optimizer = optimizer(params, lr=learning_rate)
+
         self.device = device
         self.tokenizer = tokenizer
         self.max_len = max_len
@@ -41,16 +44,17 @@ class Trainer:
             self.optimizer.step()
 
             running_loss += loss.item()
-            if i % 200 == 0:
+            if (i+1) % 200 == 0:
                 print(running_loss / 200)
                 running_loss = 0.0
-        self.validation(valid_data, vocab_dict, label_dict)
+        # self.validation(valid_data, vocab_dict, label_dict)
 
     def validation(self, valid_data, vocab_dict, label_dict):
         all_y_true = []
         all_y_predict = []
         for i, (batch_x, batch_y_true) in tqdm(enumerate(valid_data)):
-            batch_x = list(map(lambda x: sequence_padding(x, self.max_len, pos="post"), map(vocab_dict.lookup, batch_x)))
+            batch_x = list(
+                map(lambda x: sequence_padding(x, self.max_len, pos="post"), map(vocab_dict.lookup, batch_x)))
             batch_x = torch.tensor(batch_x, dtype=torch.long).to(self.device)
             batch_y_true = list(map(label_dict.lookup, batch_y_true))
             out = self.model(batch_x)
@@ -83,6 +87,7 @@ def train():
     trainer = Trainer(model, torch.nn.CrossEntropyLoss, torch.optim.Adam, tokenizer=char_tokenizer,
                       learning_rate=0.002, device=device)
     for i in range(30):
+        print(f"epoch {i}")
         trainer.train_step(train_data, valid_data, vocab_dict, label_dict)
         trainer.validation(valid_data, vocab_dict, label_dict)
     trainer.save_model(postfix="final")

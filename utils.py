@@ -8,8 +8,8 @@ import random
 
 import torch
 
-
-_bert_token_dict = json.loads(open("data/bert/bert-base-chinese/tokenizer.json", encoding="utf-8").read())["model"]["vocab"]
+_bert_token_dict = json.loads(open("data/bert/bert-base-chinese/tokenizer.json", encoding="utf-8").read())["model"][
+    "vocab"]
 
 
 def read_nlpcc_text(path):
@@ -25,17 +25,18 @@ def read_nlpcc_text(path):
 def read_cluener_text(path):
     def transfer(da):
         word_list = list(da["text"])
-        ner_list = ["O"]*len(word_list)
+        ner_list = ["O"] * len(word_list)
         for ner_type, value_dict in da["label"].items():
             for words, position_list in value_dict.items():
                 for position in position_list:
                     if position[0] == position[1]:
-                        ner_list[position[0]] = ner_type.upper()+"_S"
+                        ner_list[position[0]] = ner_type.upper() + "_S"
                     else:
-                        ner_list[position[0]] = ner_type.upper()+"_B"
-                        for pos in range(position[0]+1, position[1]+1):
-                            ner_list[pos] = ner_type.upper()+"_M"
+                        ner_list[position[0]] = ner_type.upper() + "_B"
+                        for pos in range(position[0] + 1, position[1] + 1):
+                            ner_list[pos] = ner_type.upper() + "_M"
         return word_list, ner_list
+
     with open(path, "r", encoding="utf-8") as fd:
         while True:
             line = fd.readline()
@@ -50,7 +51,7 @@ class VocabDict(dict):
         super(VocabDict, self).__init__({"<PAD>": 0, "<UNK>": 1})
         self.data = ["<PAD>", "<UNK>"]
         self.save_path = save_path
-        self.weights = [[0.0]*200, [random.random() for _ in range(200)]]
+        self.weights = [[0.0] * 200, [random.random() for _ in range(200)]]
         if not self.load():
             self.traverse(inputs)
 
@@ -205,6 +206,7 @@ def bert_tokenizer(batch_x, max_len, device):
                 res.append(_bert_token_dict["[UNK]"])
         res.append(_bert_token_dict["[SEP]"])
         return res
+
     batch_x = list(map(lambda x: sequence_padding(x, max_len), map(lookup, batch_x)))
     batch_x = torch.tensor(batch_x, dtype=torch.long).to(device)
     return batch_x
@@ -223,5 +225,15 @@ def extra_tencent_embedding(path):
         for line in res:
             fd.write(line)
 
+
+def add_weight_decay(net, l2_value, skip_list=()):
+    decay, no_decay = [], []
+    for name, param in net.named_parameters():
+        if not param.requires_grad: continue  # frozen weights
+        if len(param.shape) == 1 or name.endswith(".bias") or name in skip_list:
+            no_decay.append(param)
+        else:
+            decay.append(param)
+    return [{'params': no_decay, 'weight_decay': 0.}, {'params': decay, 'weight_decay': l2_value}]
 
 # extra_tencent_embedding(r"E:\tencent_embedding\Tencent_AILab_ChineseEmbedding.txt")

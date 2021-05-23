@@ -17,7 +17,7 @@ import torch
 
 class Trainer:
 
-    def __init__(self, model, criterion, optimizer, learning_rate, tokenizer=None, max_len=64, device="cpu"):
+    def __init__(self, model, criterion, optimizer, learning_rate, tokenizer=None, max_len=50, device="cpu"):
         self.model = model
         self.criterion = criterion()
         self.optimizer = optimizer(model.parameters(), lr=learning_rate)
@@ -50,7 +50,7 @@ class Trainer:
         all_y_true = []
         all_y_predict = []
         for i, (batch_x, batch_y_true) in tqdm(enumerate(valid_data)):
-            batch_x = list(map(lambda x: sequence_padding(x, 50, pos="pre"), map(vocab_dict.lookup, batch_x)))
+            batch_x = list(map(lambda x: sequence_padding(x, self.max_len, pos="post"), map(vocab_dict.lookup, batch_x)))
             batch_x = torch.tensor(batch_x, dtype=torch.long).to(self.device)
             batch_y_true = list(map(label_dict.lookup, batch_y_true))
             out = self.model(batch_x)
@@ -70,13 +70,16 @@ def train():
     train_data = DataLoader(train_dataset, batch_size=256, shuffle=True)
     valid_data = DataLoader(valid_dataset, batch_size=256, shuffle=True)
 
-    vocab_dict = VocabDict(train_dataset.get_all_inputs())
+    # vocab_dict = VocabDict(train_dataset.get_all_inputs())
+    vocab_dict = VocabDict([]).load_pretrained_vocab("data/tencent_char_embedding.txt")
     label_dict = LabelDict(train_dataset.get_all_labels())
 
     # model = BiLSTM(len(vocab_dict), len(label_dict), embedding_size=300, hidden_size=512, device=device)
     # model = BertClassifier(len(label_dict), device=device)
-    model = TextCNN(len(vocab_dict), len(label_dict), kernel_size_list=[1, 2, 3, 4, 5], filters=512, embedding_size=300,
-                    device=device)
+    model = TextCNN(len(vocab_dict), len(label_dict), kernel_size_list=[1, 2, 3, 4, 5], filters=512, embedding_size=200,
+                    weight=torch.tensor(vocab_dict.weights), device=device)
+    # model = TextCNN(len(vocab_dict), len(label_dict), kernel_size_list=[1, 2, 3, 4, 5], filters=512, embedding_size=200,
+    #                 device=device)
     trainer = Trainer(model, torch.nn.CrossEntropyLoss, torch.optim.Adam, tokenizer=char_tokenizer,
                       learning_rate=0.002, device=device)
     for i in range(30):

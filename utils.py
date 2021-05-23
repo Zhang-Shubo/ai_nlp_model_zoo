@@ -4,6 +4,7 @@
 # Mail: supozhang@126.com
 import json
 import os
+import random
 
 import torch
 
@@ -49,6 +50,7 @@ class VocabDict(dict):
         super(VocabDict, self).__init__({"<PAD>": 0, "<UNK>": 1})
         self.data = ["<PAD>", "<UNK>"]
         self.save_path = save_path
+        self.weights = [[0.0]*200, [random.random() for _ in range(200)]]
         if not self.load():
             self.traverse(inputs)
 
@@ -64,6 +66,21 @@ class VocabDict(dict):
         for i, word in enumerate(self.data):
             self[word] = i
         return True
+
+    def load_pretrained_vocab(self, path):
+        if not os.path.exists(path):
+            return
+        with open(path, encoding="utf-8") as fd:
+            while True:
+                line = fd.readline()
+                if not line:
+                    break
+                blocks = line.strip().split(" ")
+                self.data.append(blocks[0])
+                self.weights.append(list(map(float, blocks[1:])))
+        for i, word in enumerate(self.data):
+            self[word] = i
+        return self
 
     def save(self):
         with open(self.save_path, "w", encoding="utf-8") as fd:
@@ -172,8 +189,8 @@ def sequence_padding(seq, max_len, pos="post", pad_idx=0):
     return z
 
 
-def char_tokenizer(batch_x, lookup_f, max_len, device):
-    batch_x = list(map(lambda x: sequence_padding(x, max_len), map(lookup_f, batch_x)))
+def char_tokenizer(batch_x, lookup_f, max_len, device, padding_pos="post"):
+    batch_x = list(map(lambda x: sequence_padding(x, max_len, pos=padding_pos), map(lookup_f, batch_x)))
     batch_x = torch.tensor(batch_x, dtype=torch.long).to(device)
     return batch_x
 
@@ -204,4 +221,7 @@ def extra_tencent_embedding(path):
                 res.append(line)
     with open("data/tencent_char_embedding.txt", "w", encoding="utf-8") as fd:
         for line in res:
-            fd.write(line + "\n")
+            fd.write(line)
+
+
+# extra_tencent_embedding(r"E:\tencent_embedding\Tencent_AILab_ChineseEmbedding.txt")

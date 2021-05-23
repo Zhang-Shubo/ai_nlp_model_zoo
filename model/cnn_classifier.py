@@ -12,7 +12,7 @@ class TextCNN(nn.Module):
     def __init__(self, vocab_size, output_size, embedding_size,
                  kernel_size_list, filters,
                  padding_idx=0, dropout_rate=0.1,
-                 device="cpu"):
+                 device="cpu", weight=None):
         """
         CNN mode for text classifier
         """
@@ -25,7 +25,8 @@ class TextCNN(nn.Module):
         self.device = device
         self.filters = filters
 
-        self.word_embedding = nn.Embedding(vocab_size, embedding_size, padding_idx=padding_idx).to(self.device)
+        self.word_embedding = nn.Embedding(vocab_size, embedding_size, padding_idx=padding_idx,
+                                           _weight=weight).to(self.device)
         self.cnn = nn.ModuleList([
             nn.Sequential(nn.Conv1d(embedding_size, filters, (i,)),
                           nn.ReLU(),

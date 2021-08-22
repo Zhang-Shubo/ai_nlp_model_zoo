@@ -9,6 +9,7 @@ from torch.utils.data import DataLoader
 
 from metric.metric import accuracy
 from model.bert_classifier import BertClassifier
+from model.bilstm_classifier import BiLSTM
 from model.cnn_classifier import TextCNN
 from utils import VocabDict, LabelDict, sequence_padding, char_tokenizer, add_weight_decay
 
@@ -32,7 +33,7 @@ class Trainer:
         running_loss = 0.0
         for i, (batch_x, batch_y_true) in tqdm(enumerate(train_data)):
             if callable(self.tokenizer):
-                batch_x = self.tokenizer(batch_x, vocab_dict.lookup, self.max_len, self.device)
+                batch_x = self.tokenizer(batch_x, vocab_dict.lookup, self.max_len, self.device, padding_pos="post")
             else:
                 batch_x = list(batch_x)
             batch_y_true = list(map(label_dict.lookup, batch_y_true))
@@ -78,10 +79,11 @@ def train():
     vocab_dict = VocabDict([]).load_pretrained_vocab("data/tencent_char_embedding.txt")
     label_dict = LabelDict(train_dataset.get_all_labels())
 
-    # model = BiLSTM(len(vocab_dict), len(label_dict), embedding_size=300, hidden_size=512, device=device)
+    model = BiLSTM(len(vocab_dict), len(label_dict), embedding_size=300, hidden_size=512, connect_mode="attention",
+                   weights=None, device=device)
     # model = BertClassifier(len(label_dict), device=device)
-    model = TextCNN(len(vocab_dict), len(label_dict), kernel_size_list=[1, 2, 3, 4, 5], filters=512, embedding_size=200,
-                    weight=torch.tensor(vocab_dict.weights), device=device)
+    # model = TextCNN(len(vocab_dict), len(label_dict), kernel_size_list=[1, 2, 3, 4, 5], filters=512, embedding_size=200,
+    #                 weight=torch.tensor(vocab_dict.weights), device=device)
     # model = TextCNN(len(vocab_dict), len(label_dict), kernel_size_list=[1, 2, 3, 4, 5], filters=512, embedding_size=200,
     #                 device=device)
     trainer = Trainer(model, torch.nn.CrossEntropyLoss, torch.optim.Adam, tokenizer=char_tokenizer,
